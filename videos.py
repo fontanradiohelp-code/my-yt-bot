@@ -37,7 +37,7 @@ def get_ydl_opts(media_type, file_id):
         'noplaylist': True,
         'quiet': False,
         'no_warnings': False,
-        # 'cookiefile': 'cookies.txt', # Раскомментируй эту строку, если добавишь файл cookies.txt
+        'cookiefile': 'cookies.txt', # Раскомментируй эту строку, если добавишь файл cookies.txt
         
         # Обманка YouTube: используем имитацию мобильных устройств
         'extractor_args': {
@@ -144,3 +144,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
