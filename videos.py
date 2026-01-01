@@ -8,9 +8,15 @@ from yt_dlp import YoutubeDL
 from aiohttp import web
 
 # --- НАСТРОЙКИ ---
-API_TOKEN = '8357041848:AAFdjLp--MFMe40-axA6rwerdpHTNqVH1gw'
-DOWNLOAD_PATH = "downloads"
+API_TOKEN = os.getenv('BOT_TOKEN')
+DOWNLOAD_PATH = "downloads"  # ЭТОЙ СТРОЧКИ НЕ ХВАТАЛО
 
+# Проверка токена
+if not API_TOKEN:
+    print("Ошибка: Переменная BOT_TOKEN не установлена!")
+    exit(1)
+
+# Создание папки для закачек
 if not os.path.exists(DOWNLOAD_PATH):
     os.makedirs(DOWNLOAD_PATH)
 
@@ -18,7 +24,7 @@ bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
 user_links = {}
 
-# --- ВЕБ-СЕРВЕР ДЛЯ ХОСТИНГА (ЧТОБЫ НЕ ЗАСЫПАЛ) ---
+# --- ВЕБ-СЕРВЕР ДЛЯ RENDER ---
 async def handle(request):
     return web.Response(text="Бот работает!")
 
@@ -27,12 +33,9 @@ app.router.add_get('/', handle)
 
 # --- ЛОГИКА СКАЧИВАНИЯ ---
 def get_ydl_opts(media_type, file_id):
-    # Определяем путь к папке, где лежит этот скрипт
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    
-    # Общие настройки для всех форматов
+    # На Render ffmpeg устанавливается в систему, путь указывать не обязательно
+    # Но мы оставим настройки гибкими
     common_opts = {
-        'ffmpeg_location': current_dir,  # Указываем боту искать ffmpeg в нашей папке
         'noplaylist': True,
         'quiet': False,
         'no_warnings': False,
@@ -60,9 +63,8 @@ def get_ydl_opts(media_type, file_id):
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     await message.answer(
-        "👋 **Привет! Я обновленный загрузчик 2026.**\n\n"
-        "Я использую локальный ffmpeg для обхода защиты.\n"
-        "**Просто пришли мне ссылку на YouTube!**"
+        "👋 **Привет! Я загрузчик для Render.**\n\n"
+        "Пришли мне ссылку на YouTube, и я скачаю видео или аудио."
     )
 
 @dp.message(F.text.regexp(r'(https?://)?(www\.)?(youtube\.com|youtu\.be|youtube\.com/shorts)/.+'))
@@ -88,18 +90,17 @@ async def start_download(callback: types.CallbackQuery):
     url = user_links[user_id]
     file_id = f"file_{user_id}_{int(asyncio.get_event_loop().time())}"
     
-    status_msg = await callback.message.edit_text(f"⏳ **Загрузка {media_type.upper()}...**\nИспользую локальный движок ffmpeg.")
+    status_msg = await callback.message.edit_text(f"⏳ **Загрузка {media_type.upper()}...**")
     
     try:
         opts = get_ydl_opts(media_type, file_id)
-        
-        # Скачивание в фоновом режиме
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, lambda: YoutubeDL(opts).download([url]))
         
-        # Поиск итогового файла
         ext = "mp4" if media_type == "mp4" else "mp3"
         final_file = None
+        
+        # Ищем скачанный файл в папке
         for f in os.listdir(DOWNLOAD_PATH):
             if f.startswith(file_id) and f.endswith(ext):
                 final_file = os.path.join(DOWNLOAD_PATH, f)
@@ -110,13 +111,13 @@ async def start_download(callback: types.CallbackQuery):
             
             input_file = types.FSInputFile(final_file)
             if media_type == "mp4":
-                await bot.send_video(callback.message.chat.id, video=input_file, caption="Ваше видео готово!")
+                await bot.send_video(callback.message.chat.id, video=input_file, caption="Ваше видео!")
             else:
-                await bot.send_audio(callback.message.chat.id, audio=input_file, caption="Ваше аудио готово!")
+                await bot.send_audio(callback.message.chat.id, audio=input_file, caption="Ваше аудио!")
             
             os.remove(final_file)
         else:
-            raise Exception("Файл не найден после скачивания.")
+            raise Exception("Файл не найден. Возможно, он слишком большой.")
             
     except Exception as e:
         await callback.message.answer(f"❌ **Ошибка:**\n{str(e)}")
@@ -130,13 +131,13 @@ async def start_download(callback: types.CallbackQuery):
 
 # --- ЗАПУСК ---
 async def main():
-    # Запуск веб-сервера (для Render.com)
+    # Запуск веб-сервера для Render
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, '0.0.0.0', 8080)
     asyncio.create_task(site.start())
     
-    print("✅ Бот запущен! Локальный ffmpeg подключен.")
+    print("✅ Бот запущен!")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
